@@ -70,8 +70,10 @@ jobs:
 
       - name: Extract version from Dockerfile
         id: version
+        env:
+          LIBRARY: ${{ matrix.library }}
         run: |
-          version=$(grep -m1 -oP '^ARG \w+_VERSION=\K\S+' containers/${{ matrix.library }}/Dockerfile)
+          version=$(grep -oP '^ARG \w+_VERSION=\K\S+' "containers/$LIBRARY/Dockerfile" | paste -sd-)
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Extract metadata (tags, labels)
@@ -88,7 +90,7 @@ jobs:
         with:
           context: containers/${{ matrix.library }}
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.library }}
