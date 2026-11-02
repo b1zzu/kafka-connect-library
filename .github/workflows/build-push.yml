@@ -1,0 +1,95 @@
+name: Build and Push Libraries
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'containers/**'
+  pull_request:
+    paths:
+      - 'containers/**'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      libraries: ${{ steps.libraries.outputs.libraries }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: List libraries to build
+        id: libraries
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            dirs=$(find containers -mindepth 1 -maxdepth 1 -type d)
+          else
+            dirs=$(git diff --name-only "$BASE" HEAD -- containers/ | cut -d/ -f1-2)
+          fi
+          libraries=$(for d in $dirs; do [ -f "$d/Dockerfile" ] && basename "$d"; done | sort -u | jq -Rnc '[inputs]')
+          echo "libraries=$libraries" >> "$GITHUB_OUTPUT"
+
+  build-and-push:
+    needs: changes
+    if: needs.changes.outputs.libraries != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        library: ${{ fromJSON(needs.changes.outputs.libraries) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from Dockerfile
+        id: version
+        run: |
+          version=$(grep -m1 -oP '^ARG \w+_VERSION=\K\S+' containers/${{ matrix.library }}/Dockerfile)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.library }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.version.outputs.version }},enable={{is_default_branch}}
+
+      - name: Build and push ${{ matrix.library }} image
+        uses: docker/build-push-action@v7
+        with:
+          context: containers/${{ matrix.library }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.library }}
+          cache-to: type=gha,scope=${{ matrix.library }},mode=max
