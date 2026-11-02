@@ -6,27 +6,14 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Update connect-file plugin version in sample-plugins Dockerfile",
+      "description": "Update Kafka version in sample-plugins Dockerfile",
       "managerFilePatterns": [
         "/^containers/sample-plugins/Dockerfile$/"
       ],
       "matchStrings": [
-        "ARG CONNECT_FILE_VERSION=(?<currentValue>\\S+)"
+        "ARG KAFKA_VERSION=(?<currentValue>\\S+)"
       ],
       "depNameTemplate": "org.apache.kafka:connect-file",
-      "datasourceTemplate": "maven",
-      "registryUrlTemplate": "https://maven-central.storage-download.googleapis.com/maven2"
-    },
-    {
-      "customType": "regex",
-      "description": "Update connect-mirror plugin version in sample-plugins Dockerfile",
-      "managerFilePatterns": [
-        "/^containers/sample-plugins/Dockerfile$/"
-      ],
-      "matchStrings": [
-        "ARG CONNECT_MIRROR_VERSION=(?<currentValue>\\S+)"
-      ],
-      "depNameTemplate": "org.apache.kafka:connect-mirror",
       "datasourceTemplate": "maven",
       "registryUrlTemplate": "https://maven-central.storage-download.googleapis.com/maven2"
     },
